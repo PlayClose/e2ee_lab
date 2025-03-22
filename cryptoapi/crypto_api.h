@@ -5,9 +5,13 @@
 namespace playclose {
 	namespace crypto {
 
-	//TODO SFINAE is cipher based from i_cipher and so on
-	//is key_negotiation from base_key_negotiation
-	template <typename key_negotiation, typename cipher>
+	template <typename key_negotiation, typename cipher,
+		typename = typename std::enable_if<
+			std::is_base_of<i_cipher, cipher>::value &&
+			std::is_base_of<i_key_negotiation, key_negotiation>::value,
+			void
+		>::type
+	>
 	class key_bank
 	{
 	private:
