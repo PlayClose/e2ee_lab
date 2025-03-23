@@ -2,7 +2,7 @@
 #include <chrono>
 #include <boost/asio.hpp>
 #include <cryptoapi/crypto_api.h>
-#include "misc.h"
+#include <include/msg.h>
 #include "db.h"
 
 
@@ -35,18 +35,22 @@ namespace playclose {
 		std::condition_variable cv_key_negotiation_;
 		std::atomic<bool> start_key_negotiation_; // start key negotiation process
 		std::function<std::string (void)> get_prime_; //TODO use type free callback
+
 	private:
 		//boost::asio::streambuf buf_;
-		std::string buf_; //TODO make std::vector<uint8_t>
+		std::string buf_; //TODO make std::vector<uint8_t> ?
+		//std::vector<uint8_t> buf_
 		tcp::socket socket_;
 		std::string cli_pub_key_;
 		std::shared_ptr<crypto::key_bank<Proto, Cipher>> crypt_;
+		std::unique_ptr<misc::msg<Proto, Cipher>> msg_;
 		std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections_;
 		boost::asio::cancellation_signal cancel_signal_;
 	public:
 		session(boost::asio::io_context& io_context, int id, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections,
 			std::function<std::string(void)> get_prime) :
 			crypt_(crypto::get_api<Proto, Cipher>(512, 2)),
+			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			str_id_(std::to_string(id)),
 			connections_(connections),
@@ -57,6 +61,7 @@ namespace playclose {
 		};
 		session(boost::asio::io_context& io_context, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections) :
 			crypt_(crypto::get_api<Proto, Cipher>(512, 2)),
+			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			connections_(connections),
 			state_(state::init)
@@ -89,6 +94,7 @@ namespace playclose {
 				[this](boost::system::error_code const& er, size_t size) 
 					{
 						if(er) {
+							//TODO stop client in case of error
 							std::cout << "__dbg_ read error: " << buf_; //TODO add async logging
 						}
 						else {	
@@ -105,7 +111,6 @@ namespace playclose {
 							else {
 								buf_ = crypt_->decrypt(cli_pub_key_, buf_);
 								std::string cmd = buf_.substr(0,16);
-								//buf_ = buf_.substring(16); //TODO check
 								std::cout << "Decrypted: " << cmd << std::endl;
 								//cmd, i.e. client server talking
 								if(cmd == "connect_with_cli") {	
@@ -134,8 +139,6 @@ namespace playclose {
 						}
 					});
 		}
-
-			
 		
 		void cli_srv_channel() {
 			write_cli_srv(crypt_->get_prime());
@@ -163,14 +166,11 @@ namespace playclose {
 								}
 							}
 							else {	
-								std::cout << "RCV size: " << size << "  raw: " << buf_ << std::endl;
-								//TODO parse_msg(). That part will be exclude after str to vector switch.
-								std::string src_id = buf_.substr(0, 3);
-								std::string dst_id = buf_.substr(3, 3);
-								std::string str_msg_size = buf_.substr(6, 3);
-								buf_ = buf_.substr(6, std::stoi(str_msg_size) + 3);
-								std::cout << "RCV: " << buf_ << std::endl;
-								db::get_instance()->save(dst_id, buf_);
+								std::string src, dst;
+								auto payload = msg_->transfer_e2e(buf_, src, dst);
+								if(!payload.second.empty()) { //TODO for what? to avoid null msg?
+									db::get_instance()->save(dst, payload.first + payload.second);
+								}
 								set_state(state::free);
 							}
 						}
@@ -202,23 +202,19 @@ namespace playclose {
 				[this](boost::system::error_code const& er, size_t size) 
 					{
 						if(er) {
+							//TODO stop client there
 							std::cout << "__dbg_ read error: " << buf_;
 						}
 						else {	
-							//parse_msg()
-							std::string src_id = buf_.substr(0, 3);
-							std::string dst_id = buf_.substr(3, 3);
-							std::string str_msg_size = buf_.substr(6, 3);
-							if(src_id == dst_id) {
-								str_id_ = src_id;
-								int int_msg_size = std::stoi(str_msg_size);
-								buf_ = buf_.substr(9, int_msg_size + 9);
-								cli_pub_key_ = buf_;
+							std::string src, dst;
+							auto payload = msg_->transfer_e2e(buf_, src, dst);
+							if(src == dst) { //TODO check attr if need it
+								str_id_ = src;
+								cli_pub_key_ = payload.second;
 							}
 							else {
-								int int_msg_size = std::stoi(str_msg_size);
-								buf_ = buf_.substr(9, int_msg_size + 9);
-								std::cout << "RCV: " << buf_ << std::endl;
+								//TODO stop client there
+								throw(std::logic_error("Oops. Protocol error."));
 							}
 							set_state(state::free);
 						}

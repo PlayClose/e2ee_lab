@@ -15,6 +15,7 @@
 #include <boost/asio.hpp>
 #include <cryptoapi/crypto_api.h>
 #include <cryptoapi/misc.h>
+#include <include/msg.h>
 
 using boost::asio::ip::tcp;
 auto constexpr delay = 1000;
@@ -171,9 +172,17 @@ int main(int argc, char* argv[])
 		
 
 		//Init client on e2e_node 
-		std::cout << "Init client on e2e_node SND: " + id + id + "008" + "128" + crypt_e2e->get_pub_key() << std::endl;
-		socket.write_some(boost::asio::buffer(id + id + "128" + crypt_e2e->get_pub_key()));
-	
+		std::unique_ptr<playclose::misc::msg<playclose::crypto::openssl_dh, playclose::crypto::aes>> msg =
+			std::make_unique<playclose::misc::msg<playclose::crypto::openssl_dh, playclose::crypto::aes>>
+				(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
+		
+		auto msg_init = msg->build_msg_e2e(id, id, crypt_e2e->get_pub_key());
+		std::cout << "Init client on e2e_node SND: " + msg_init.first + msg_init.second << std::endl;
+		socket.write_some(boost::asio::buffer(msg_init.first + msg_init.second));
+
+		//std::cout << "Init client on e2e_node SND: " + id + id + "008" + "128" + crypt_e2e->get_pub_key() << std::endl;
+		//socket.write_some(boost::asio::buffer(id + id + "128" + crypt_e2e->get_pub_key()));
+			
 		std::mutex m;
 		std::condition_variable cv_snd, cv_rcv;
 		std::atomic<bool> ready = true;
@@ -189,9 +198,11 @@ int main(int argc, char* argv[])
 					return -1; // Connection closed cleanly by peer.
 				else if (error)
 					throw boost::system::system_error(error); // Some other error.
-				buf = buf.substr(3, 16);
+				//buf = buf.substr(0, 16);
 				std::cout << "RCV crypt: " << buf <<  " RCV.size(): " << buf.size() << std::endl;
-				std::cout << "Decrypt: " <<  crypt_e2e->decrypt(opposite_node_pub_key, buf) << std::endl;
+				auto talk = msg->parse_msg_e2e(buf);
+				std::cout << "Decrypt: " << talk << " size: " << talk.size() <<  std::endl;
+				//std::cout << "Decrypt: " <<  crypt_e2e->decrypt(opposite_node_pub_key, buf) << std::endl;
 				//std::cout << "RCV: " << buf << std::endl;
 				ready.store(true);
 				cv_snd.notify_one();
@@ -203,19 +214,18 @@ int main(int argc, char* argv[])
 			while(1) {
 				std::unique_lock<std::mutex> lock(m);
 				cv_snd.wait(lock, [&ready]{return ready.load();});
-				std::string len = "016";	
-				std::string payload = "_somedatainfo" + id;
-				//std::cout << "dec_key: " << crypt_e2e->get_pub_key() << std::endl;
-				std::string crypt_payload = crypt_e2e->encrypt(opposite_node_pub_key, payload);
-				std::cout << "__dbg_ crypt_payload size: " << crypt_payload.size() << std::endl;
-				std::string msg = id + dst + len + crypt_payload;
+				std::string payload = "_somedatainfo" + id + "_somedatainfo" + id;
+				auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::encrypt);
+				//auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::none);
+				std::cout << "Talk on e2e_node SND: " + talk.first + talk.second << std::endl;
+				socket.write_some(boost::asio::buffer(talk.first + talk.second));
+
 				//std::cout << "__dbg_ payload size: " << payload.size() << std::endl;
 				//std::string msg = id + dst + len + payload ;
-				std::cout << "SND: " + msg  << std::endl;
-				int repeat = 1;
+				/*int repeat = 1;
 				while(repeat--) {
 					socket.write_some(boost::asio::buffer(msg));
-				}
+				}*/
 				std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 				ready.store(false);
 				cv_rcv.notify_one();
