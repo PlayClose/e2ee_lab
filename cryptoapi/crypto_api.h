@@ -24,6 +24,7 @@ namespace playclose {
 			,cipher_(std::make_unique<cipher>())
 		{
 		}	
+		~key_bank() = default;
 		//TODO need to know about work with ceritificates (pki)
 		//TODO add msg signature option
 		std::string encrypt(const std::string& cli_pub_key, const std::string& data) {

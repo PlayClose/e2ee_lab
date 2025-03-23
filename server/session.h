@@ -178,8 +178,7 @@ namespace playclose {
 			);
 		}
 
-		void request_cancel()
-		{
+		void request_cancel() {
 			cancel_signal_.emit(boost::asio::cancellation_type::total);
 			set_state(state::free);
 		}

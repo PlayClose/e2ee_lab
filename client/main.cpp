@@ -214,7 +214,7 @@ int main(int argc, char* argv[])
 			while(1) {
 				std::unique_lock<std::mutex> lock(m);
 				cv_snd.wait(lock, [&ready]{return ready.load();});
-				std::string payload = "_somedatainfo" + id + "_somedatainfo" + id;
+				std::string payload = "now is free to write everything, wow" + id;
 				auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::encrypt);
 				//auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::none);
 				std::cout << "Talk on e2e_node SND: " + talk.first + talk.second << std::endl;
