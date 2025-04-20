@@ -2,13 +2,12 @@ set(target cryptoapi)
 
 add_library(${target} SHARED #${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
 							${CMAKE_CURRENT_SOURCE_DIR}/openssl_dh.cpp
+							${CMAKE_CURRENT_SOURCE_DIR}/certificate.cpp
 							${CMAKE_CURRENT_SOURCE_DIR}/misc.cpp
 							${CMAKE_CURRENT_SOURCE_DIR}/aes/ctaes.c
 							${CMAKE_CURRENT_SOURCE_DIR}/aes/aes.cpp)
 message("libdir: ${CMAKE_SOURCE_DIR}")
 set_target_properties(${target} PROPERTIES
-  #IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/build/lib/libbar.so"
-  #INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/include/libbar"
   CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 

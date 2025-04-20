@@ -16,22 +16,23 @@ namespace playclose {
 		std::vector<std::shared_ptr<session<Proto, Cipher>>> connections_;
 		int connection_num_;
 		std::string prime_;
+		std::string pem_ca_;
 	public:
 		tcp_server(boost::asio::io_context& io_context, int port)
 			: io_context_(io_context),
 			  worker_(std::make_unique<boost::asio::io_service::work>(io_context)),
 			  acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
 			  connection_num_(1), // 0 - server
-			  prime_("")
+			  prime_{},
+			  pem_ca_{}
 		{
 			prime_ = crypto::get_api<Proto, Cipher>(512, 2)->get_prime();	
 			start_accept();
-			//tcp_server_main_task(); //TODO think about asio task for prime generation, in case of regenerate prime
 		}
 	private:
 		void start_accept() {
 			auto new_connection = std::make_shared<session<Proto, Cipher>>(io_context_, connection_num_, connections_, 
-										[this]() -> std::string {return this->prime_;});
+										prime_, [this]() -> std::string {return this->pem_ca_;});
 			connection_num_++;
 			acceptor_.async_accept(new_connection->socket(),
 				boost::bind(&tcp_server::handle_accept, this, new_connection,

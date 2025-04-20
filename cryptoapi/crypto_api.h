@@ -1,6 +1,7 @@
 #pragma once 
 #include "openssl_dh.h"
 #include "aes.h"
+#include "certificate.h"
 
 namespace playclose {
 	namespace crypto {
@@ -17,15 +18,16 @@ namespace playclose {
 	private:
 		std::unique_ptr<i_cipher> cipher_;
 		std::unique_ptr<i_key_negotiation> key_negotiation_;
+		std::unique_ptr<x509_certificate> cert_;
 	public:
 		template<typename ... Args>
 		key_bank(Args... args) : 
 			key_negotiation_(std::make_unique<key_negotiation>(args...))
 			,cipher_(std::make_unique<cipher>())
+			,cert_(std::make_unique<x509_certificate>())
 		{
-		}	
+		}
 		~key_bank() = default;
-		//TODO need to know about work with ceritificates (pki)
 		//TODO add msg signature option
 		std::string encrypt(const std::string& cli_pub_key, const std::string& data) {
 			return cipher_->encrypt(key_negotiation_->get_cipher_key(cli_pub_key), data);

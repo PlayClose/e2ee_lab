@@ -34,7 +34,8 @@ namespace playclose {
 		std::atomic<state> state_;
 		std::condition_variable cv_key_negotiation_;
 		std::atomic<bool> start_key_negotiation_; // start key negotiation process
-		std::function<std::string (void)> get_prime_; //TODO use type free callback
+		std::string prime_;
+		std::function<std::string (void)> pem_ca_callback_;
 
 	private:
 		//boost::asio::streambuf buf_;
@@ -48,14 +49,15 @@ namespace playclose {
 		boost::asio::cancellation_signal cancel_signal_;
 	public:
 		session(boost::asio::io_context& io_context, int id, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections,
-			std::function<std::string(void)> get_prime) :
+			const std::string& prime, std::function<std::string (void)> callback) :
 			crypt_(crypto::get_api<Proto, Cipher>(512, 2)),
 			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			str_id_(std::to_string(id)),
 			connections_(connections),
 			state_(state::init),
-			get_prime_(get_prime)
+			prime_(prime),
+			pem_ca_callback_(callback)
 		{
 			buf_.resize(buf_size);
 		};
@@ -64,7 +66,10 @@ namespace playclose {
 			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			connections_(connections),
-			state_(state::init)
+			state_(state::init),
+			str_id_{},
+			prime_{},
+			pem_ca_callback_{}
 		{
 			buf_.resize(buf_size);
 		};
@@ -116,10 +121,8 @@ namespace playclose {
 								if(cmd == "connect_with_cli") {	
 									//send own client id, cause client doesn't know his id
 									//тут надо отправить прайм единый для всех пользователей
-									if(get_prime_) {
-										std::string prime_msg = crypt_->encrypt(cli_pub_key_, str_id_ + get_prime_());
-										write_cli_srv(std::to_string(prime_msg.size()) + prime_msg);
-									}
+									std::string prime_msg = crypt_->encrypt(cli_pub_key_, str_id_ + prime_);
+									write_cli_srv(std::to_string(prime_msg.size()) + prime_msg);
 								}
 								else if(cmd == "gets_list_of_cli") {
 									std::string crypt_msg = crypt_->encrypt(cli_pub_key_, db::get_instance()->serialize_keys());	
