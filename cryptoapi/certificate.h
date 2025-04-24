@@ -40,6 +40,8 @@ namespace playclose {
 		std::unique_ptr<X509, deleter<X509_free>> generate_x509();
 		std::unique_ptr<X509, deleter<X509_free>> sign_csr(X509_REQ* req, int daysValid = 365);
 		std::unique_ptr<X509, deleter<X509_free>> create_self_signed_cert(const std::string& common_name = "server", int valid_days = 365);
+		void parse_x509_certificate(X509* cert);
+		void parse_x509_csr(X509_REQ* csr);
 	};
 
 	} //namespace crypto 

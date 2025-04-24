@@ -227,7 +227,8 @@ static std::string public_key_info(EVP_PKEY* pkey) {
 }
 
 // Parse X509 certificate
-void parse_x509_certificate(X509* cert) {
+//TODO if cert_ca gives from csr, need to parse on root_ca pub key
+void x509_certificate::parse_x509_certificate(X509* cert) {
     if(!cert) {
         throw std::invalid_argument("Certificate cannot be null");
     }
@@ -269,7 +270,7 @@ void parse_x509_certificate(X509* cert) {
 }
 
 // Parse X509 CSR
-void verify_x509_csr(X509_REQ* csr) {
+void x509_certificate::parse_x509_csr(X509_REQ* csr) {
     if(!csr) {
         throw std::invalid_argument("CSR cannot be null");
     }
