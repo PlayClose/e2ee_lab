@@ -12,7 +12,7 @@ namespace playclose {
 	struct i_cipher
 	{
 		i_cipher() = default;
-		~i_cipher() = default;
+		virtual ~i_cipher() = default;
 		virtual std::string encrypt(const std::string& key, const std::string& data) = 0;
 		virtual std::string decrypt(const std::string& key, const std::string& data) = 0;
 	};
