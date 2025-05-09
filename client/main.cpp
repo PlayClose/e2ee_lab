@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
 		else if (error)
 			throw boost::system::system_error(error); // Some other error.
 
-		auto crypt = playclose::crypto::get_api<playclose::crypto::ServerPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(buf, "2");
+		auto crypt = playclose::crypto::get_api<playclose::crypto::ClientPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(buf, "2");
 		std::cout << "RCV prime: " << buf << std::endl;
 		std::cout << std::endl;
 
@@ -109,10 +109,10 @@ int main(int argc, char* argv[])
 		std::cout << "Prime e2e: " << prime_e2e << std::endl;
 		//TODO auto doesn't work, make wrapper
 		std::shared_ptr<playclose::crypto::api< 
-				playclose::crypto::server_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>, 
+				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>, 
 				playclose::crypto::openssl_dh, 
 				playclose::crypto::aes>> 
-		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ServerPolicy, 
+		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ClientPolicy, 
 													playclose::crypto::openssl_dh, 
 													playclose::crypto::aes>(prime_e2e, "2");
 		//надо отправить pub_cli_key и id
@@ -190,7 +190,7 @@ int main(int argc, char* argv[])
 						playclose::crypto::server_certificate>>*/
 		auto msg = std::make_unique<playclose::misc::msg<playclose::crypto::openssl_dh, 
 														 playclose::crypto::aes, 
-														 playclose::crypto::server_certificate>>
+														 playclose::crypto::client_certificate>>
 								(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
 		//msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 		
