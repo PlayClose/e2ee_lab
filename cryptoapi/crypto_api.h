@@ -21,11 +21,11 @@ namespace playclose {
 
 	//api
 	template <typename certificate, typename key_negotiation, typename cipher
-		/*,typename = typename std::enable_if<
+		,typename = typename std::enable_if<
 			std::is_base_of<i_cipher, cipher>::value &&
 			std::is_base_of<i_key_negotiation, key_negotiation>::value,
 			void
-		>::type*/
+		>::type
 	>
 	class api 
 	{
@@ -65,10 +65,8 @@ namespace playclose {
 		std::unique_ptr<x509_certificate> cert_;
 	public:
 		template<typename ... Args>
-		server_certificate(Args&& ... args) : api<server_certificate<key_negotiation, cipher>, key_negotiation, cipher>(args...), 	
-			cert_(std::make_unique<x509_certificate>())
-		{}
-		server_certificate() :
+		server_certificate(Args&& ... args) : 
+			api<server_certificate<key_negotiation, cipher>, key_negotiation, cipher>(std::forward<Args>(args)...), 	
 			cert_(std::make_unique<x509_certificate>())
 		{}
 
@@ -88,13 +86,11 @@ namespace playclose {
 		std::unique_ptr<x509_certificate> cert_;
 	public:
 		template<typename ... Args>
-		client_certificate(Args&& ... args) : api<client_certificate<key_negotiation, cipher>, key_negotiation, cipher>(args...), 	
+		client_certificate(Args&& ... args) :
+			api<client_certificate<key_negotiation, cipher>, key_negotiation, cipher>(std::forward<Args>(args)...), 	
 			cert_(std::make_unique<x509_certificate>())
 		{}
 
-		client_certificate() : 	
-			cert_(std::make_unique<x509_certificate>()) {}
-	 	
 		std::string generate_cert(const std::string& client_name) {
 			cert_->generate_csr(client_name);
 			return cert_->x509req_to_pem();
