@@ -26,7 +26,7 @@ namespace playclose {
 			  prime_{},
 			  pem_ca_{}
 		{
-			prime_ = crypto::get_api<Proto, Cipher>(512, 2)->get_prime();	
+			prime_ = crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)->get_prime();	
 			start_accept();
 		}
 	private:

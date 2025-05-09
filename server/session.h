@@ -23,7 +23,10 @@ namespace playclose {
 		free
 	}; 
 
-	template<typename Proto, typename Cipher>
+	template<typename Proto, 
+			 typename Cipher, 
+			 template <typename, typename> typename C = crypto::server_certificate, 
+			 typename Cert  = C<Proto, Cipher>>
 	class session : public std::enable_shared_from_this<session<Proto, Cipher>>
 	{
 	public:
@@ -43,15 +46,15 @@ namespace playclose {
 		//std::vector<uint8_t> buf_
 		tcp::socket socket_;
 		std::string cli_pub_key_;
-		std::shared_ptr<crypto::key_bank<Proto, Cipher>> crypt_;
-		std::unique_ptr<misc::msg<Proto, Cipher>> msg_;
+		std::shared_ptr<crypto::api<Cert, Proto, Cipher>> crypt_;
+		std::unique_ptr<misc::msg<Proto, Cipher, C>> msg_;
 		std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections_;
 		boost::asio::cancellation_signal cancel_signal_;
 	public:
 		session(boost::asio::io_context& io_context, int id, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections,
 			const std::string& prime, std::function<std::string (void)> callback) :
-			crypt_(crypto::get_api<Proto, Cipher>(512, 2)),
-			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
+			crypt_(crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)),
+			msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			str_id_(std::to_string(id)),
 			connections_(connections),
@@ -62,8 +65,8 @@ namespace playclose {
 			buf_.resize(buf_size);
 		};
 		session(boost::asio::io_context& io_context, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections) :
-			crypt_(crypto::get_api<Proto, Cipher>(512, 2)),
-			msg_(std::make_unique<misc::msg<Proto, Cipher>>(crypt_, [this]{return cli_pub_key_;})),
+			crypt_(crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)),
+			msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			connections_(connections),
 			state_(state::init),
@@ -144,7 +147,11 @@ namespace playclose {
 		}
 		
 		void cli_srv_channel() {
-			write_cli_srv(crypt_->get_prime());
+			 write_cli_srv(crypt_->get_prime());
+			//TODO send root certificate
+			//auto root_cert = crypt_->generate_x509();
+			//auto msg = crypt_->X509_to_pem();
+			//write_cli_srv(msg);
 		}
 	
 		void e2e_channel_read() {

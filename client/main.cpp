@@ -40,6 +40,12 @@ int main(int argc, char* argv[])
 		std::string buf;
 		buf.resize(1000);
 		boost::system::error_code error;
+		
+		//TODO certificates tasks:
+		//RCV root server sertificate
+		//SND request for certificate signing
+		//RCV certificate, signed by server
+		//verify that certifiacate -> need take key from root server certificate 
 
 		//RCV prime
 		size_t len = socket.read_some(boost::asio::buffer(buf), error);
@@ -48,7 +54,7 @@ int main(int argc, char* argv[])
 		else if (error)
 			throw boost::system::system_error(error); // Some other error.
 
-		auto crypt = playclose::crypto::get_api<playclose::crypto::openssl_dh, playclose::crypto::aes>(buf, "2");
+		auto crypt = playclose::crypto::get_api<playclose::crypto::ServerPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(buf, "2");
 		std::cout << "RCV prime: " << buf << std::endl;
 		std::cout << std::endl;
 
@@ -101,7 +107,14 @@ int main(int argc, char* argv[])
 		std::cout << "Own ID: " << id << std::endl;
 		std::string prime_e2e = crypt->decrypt(srv_pub_key, buf).substr(1, 128);
 		std::cout << "Prime e2e: " << prime_e2e << std::endl;
-		auto crypt_e2e = playclose::crypto::get_api<playclose::crypto::openssl_dh, playclose::crypto::aes>(prime_e2e, "2");
+		//TODO auto doesn't work, make wrapper
+		std::shared_ptr<playclose::crypto::api< 
+				playclose::crypto::server_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>, 
+				playclose::crypto::openssl_dh, 
+				playclose::crypto::aes>> 
+		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ServerPolicy, 
+													playclose::crypto::openssl_dh, 
+													playclose::crypto::aes>(prime_e2e, "2");
 		//надо отправить pub_cli_key и id
 		std::cout << "e2e cli_pub_key: " << crypt_e2e->get_pub_key() << std::endl;
 		//SND crypt
@@ -172,9 +185,14 @@ int main(int argc, char* argv[])
 		
 
 		//Init client on e2e_node 
-		std::unique_ptr<playclose::misc::msg<playclose::crypto::openssl_dh, playclose::crypto::aes>> msg =
-			std::make_unique<playclose::misc::msg<playclose::crypto::openssl_dh, playclose::crypto::aes>>
-				(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
+		/*std::unique_ptr<playclose::misc::msg<playclose::crypto::openssl_dh, 
+						playclose::crypto::aes, 
+						playclose::crypto::server_certificate>>*/
+		auto msg = std::make_unique<playclose::misc::msg<playclose::crypto::openssl_dh, 
+														 playclose::crypto::aes, 
+														 playclose::crypto::server_certificate>>
+								(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
+		//msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 		
 		auto msg_init = msg->build_msg_e2e(id, id, crypt_e2e->get_pub_key());
 		std::cout << "Init client on e2e_node SND: " + msg_init.first + msg_init.second << std::endl;

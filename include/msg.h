@@ -19,14 +19,14 @@ namespace playclose {
 		decrypt
 	};
 
-	template <typename Proto, typename Cipher>
+	template <typename Proto, typename Cipher, template <typename, typename> typename C, typename Cert  = C<Proto, Cipher>>
 	class msg {
 	private:
-		std::shared_ptr<crypto::key_bank<Proto, Cipher>>& crypt_;	
+		std::shared_ptr<crypto::api<Cert, Proto, Cipher>>& crypt_;	
 		std::function<std::string (void)> get_cli_pub_key_;
 	public:
 		template <typename Func>
-		msg(std::shared_ptr<crypto::key_bank<Proto, Cipher>>& crypt, Func&& callback) :
+		msg(std::shared_ptr<crypto::api<Cert, Proto, Cipher>>& crypt, Func&& callback) :
 			crypt_(crypt),
 			get_cli_pub_key_(std::forward<Func>(callback))
 		{

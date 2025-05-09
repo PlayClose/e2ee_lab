@@ -5,6 +5,14 @@
 namespace playclose {
 	namespace crypto {
 
+void x509_certificate::set_cert_ca(std::unique_ptr<X509, deleter<X509_free>> ca_cert) {
+	ca_cert_ = std::move(ca_cert);
+}
+
+void x509_certificate::set_cert_csr(std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert) {
+	csr_cert_ = std::move(csr_cert);
+}
+
 std::string x509_certificate::x509_to_pem() {
 	if(!ca_cert_) {
 		throw std::runtime_error("Invalid certificate pointer");
@@ -103,6 +111,31 @@ std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> x509_certificate::generate_rsa
 	return key;
 }
 
+void x509_certificate::generate_csr(const std::string& commonName) {
+
+   	std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> cert(X509_REQ_new());
+    if (!cert) {
+        throw std::runtime_error("Failed to create X509_REQ");
+    }
+    //Set subject name
+    X509_NAME* name = X509_NAME_new();
+    X509_NAME_add_entry_by_txt(name, "C", MBSTRING_UTF8,
+                             (const unsigned char*)"RU", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(name, "O", MBSTRING_UTF8,
+                             (const unsigned char*)"playclose", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_UTF8,
+                             (const unsigned char*)commonName.c_str(), -1, -1, 0);
+    X509_REQ_set_subject_name(cert.get(), name);
+    //Set public key
+    X509_REQ_set_pubkey(cert.get(), key_pair_.get());
+	//Sign the CSR
+    if(!X509_REQ_sign(cert.get(), key_pair_.get(), EVP_sha256())) {
+        throw std::runtime_error("Failed to sign CSR");
+    }
+
+	set_cert_csr(std::move(cert));	
+}
+
 std::unique_ptr<X509, deleter<X509_free>> x509_certificate::sign_csr(X509_REQ* req, int daysValid) {
 	//, EVP_PKEY* caKey, X509* caCert,
     std::unique_ptr<X509, deleter<X509_free>> cert{X509_new()};
@@ -144,7 +177,7 @@ void add_name_entry(X509_NAME* name, const std::string& field, const std::string
     }
 }
 
-std::unique_ptr<X509, deleter<X509_free>> x509_certificate::create_self_signed_cert(const std::string& common_name, int valid_days) {
+void x509_certificate::generate_self_signed_ca(const std::string& common_name, int valid_days) {
     std::unique_ptr<X509, deleter<X509_free>> cert{X509_new()};
     if(!cert) {
         throw std::runtime_error("Failed to create X509 certificate");
@@ -194,8 +227,8 @@ std::unique_ptr<X509, deleter<X509_free>> x509_certificate::create_self_signed_c
     if(!X509_sign(cert.get(), key_pair_.get(), EVP_sha256())) {
         throw std::runtime_error("Failed to sign certificate");
     }
-
-    return cert;
+	
+	set_cert_ca(std::move(cert));
 }
 
 //Parse cert:
@@ -226,9 +259,10 @@ static std::string public_key_info(EVP_PKEY* pkey) {
     return std::string(data, len);
 }
 
-// Parse X509 certificate
+//Parse X509 certificate
 //TODO if cert_ca gives from csr, need to parse on root_ca pub key
-void x509_certificate::parse_x509_certificate(X509* cert) {
+//retun 0 - success, else return 1
+int x509_certificate::parse_x509_ca(X509* cert) {
     if(!cert) {
         throw std::invalid_argument("Certificate cannot be null");
     }
@@ -262,15 +296,16 @@ void x509_certificate::parse_x509_certificate(X509* cert) {
         std::cout << " - " << buf << std::endl;
     }
 	if(X509_verify(cert, pkey.get())) {
-		std::cout << "CA verified!" << std::endl;
+		//"CA verified!"
+		return 0;
 	}
-	else {
-		std::cout << "CA verify error!" << std::endl;
-	}
+	//"CA verify error!"
+	return 1;
 }
 
-// Parse X509 CSR
-void x509_certificate::parse_x509_csr(X509_REQ* csr) {
+//Parse X509 CSR
+//retun 0 - success, else return 1
+int x509_certificate::parse_x509_csr(X509_REQ* csr) {
     if(!csr) {
         throw std::invalid_argument("CSR cannot be null");
     }
@@ -288,11 +323,11 @@ void x509_certificate::parse_x509_csr(X509_REQ* csr) {
     OBJ_obj2txt(buf, sizeof(buf), sig_alg->algorithm, 0);
     std::cout << "Signature Algorithm: " << buf << std::endl;
 	if(X509_REQ_verify(csr, pkey.get())) {
-		std::cout << "CSR verified!" << std::endl;
+		//"CSR verified!"
+		return 0;
 	}
-	else {
-		std::cout << "CSR verify error" << std::endl;
-	}
+	//"CSR verify error"
+	return 1;
 }
 
 	} //namespace crypto 
