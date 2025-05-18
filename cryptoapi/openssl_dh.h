@@ -26,11 +26,18 @@ namespace playclose {
 		std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> key_pair_;
 
 	public:	
-		openssl_dh(size_t prime_len, int gen) {
+		openssl_dh(size_t prime_len, int gen = 2) {
 			prime_gen(prime_len, gen);
 			generate_keys();
 		}
-		openssl_dh(const std::string& hex_prime, const std::string& hex_gen) {
+
+		openssl_dh(const std::string& hex_prime, const std::string& hex_gen = "2") {
+			prime_.reset(convert_hex_to_bn(hex_prime));	
+			gen_.reset(convert_hex_to_bn(hex_gen));
+			generate_keys();
+		}
+	
+		void set_prime(const std::string& hex_prime, const std::string& hex_gen = "2") override {
 			prime_.reset(convert_hex_to_bn(hex_prime));	
 			gen_.reset(convert_hex_to_bn(hex_gen));
 			generate_keys();

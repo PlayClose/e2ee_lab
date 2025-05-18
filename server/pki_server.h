@@ -7,7 +7,7 @@ namespace playclose {
 
 	using boost::asio::ip::tcp;
 	template<typename Proto, typename Cipher>
-	class tcp_server
+	class pki_server 
 	{
 	private:
 		boost::asio::io_context& io_context_;
@@ -18,7 +18,7 @@ namespace playclose {
 		std::string prime_;
 		std::string pem_ca_;
 	public:
-		tcp_server(boost::asio::io_context& io_context, int port)
+		pki_server(boost::asio::io_context& io_context, int port)
 			: io_context_(io_context),
 			  worker_(std::make_unique<boost::asio::io_service::work>(io_context)),
 			  acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
@@ -35,7 +35,7 @@ namespace playclose {
 										prime_, [this]() -> std::string {return this->pem_ca_;});
 			connection_num_++;
 			acceptor_.async_accept(new_connection->socket(),
-				boost::bind(&tcp_server::handle_accept, this, new_connection,
+				boost::bind(&pki_server::handle_accept, this, new_connection,
 					boost::asio::placeholders::error));
 		}
 

@@ -2,38 +2,28 @@
 
 #include <memory>
 #include <functional>
+#include <include/misc.h>
 
 namespace playclose {
 	namespace misc {
 
-	auto constexpr src_dst_max_size = 100; //src or dst could be 100 simbols size
-	auto constexpr src_length_size = 3;
-	auto constexpr dst_length_size = 3;
-	auto constexpr payload_length_size = 4;
-	auto constexpr attr_length_size = 1;
-	auto constexpr padding = ' ';
-	
-	enum class msg_attribute : uint8_t {
-		none,
-		encrypt,
-		decrypt
-	};
-
-	template <typename Proto, typename Cipher, template <typename, typename> typename C, typename Cert  = C<Proto, Cipher>>
-	class msg {
+	template <	
+		typename Proto, 
+		typename Cipher, 
+		template <typename, typename> typename C, 
+		typename Cert = C<Proto, Cipher>>
+	class msg_e2e {
 	private:
 		std::shared_ptr<crypto::api<Cert, Proto, Cipher>>& crypt_;	
 		std::function<std::string (void)> get_cli_pub_key_;
 	public:
 		template <typename Func>
-		msg(std::shared_ptr<crypto::api<Cert, Proto, Cipher>>& crypt, Func&& callback) :
+		msg_e2e(std::shared_ptr<crypto::api<Cert, Proto, Cipher>>& crypt, Func&& callback) :
 			crypt_(crypt),
 			get_cli_pub_key_(std::forward<Func>(callback))
-		{
-			
-		}
-		~msg() = default;
-		// msg format for e2e: | attr + header | payload_size | payload |
+		{}
+		~msg_e2e() = default;
+		// |src_length_size|src|dst_length_size|dst|attr|payload_length_size|payload|
 		std::pair<std::string, std::string> build_msg_e2e(const std::string& src, const std::string& dst, 
 															const std::string& payload, msg_attribute flag = msg_attribute::none) {
 			std::string _payload = payload; //TODO depend on how to use chanks or smth. Make decision on level up.
@@ -91,6 +81,7 @@ namespace playclose {
 			}
 		}
 
+		//Functoin calls on server side for trasfering msg
 		std::pair<std::string, std::string>  transfer_e2e(const std::string& buf, std::string& src, std::string& dst) {
 			auto src_size = std::stoi(buf.substr(0, src_length_size));
 			auto pos = src_length_size;

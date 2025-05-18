@@ -131,7 +131,7 @@ std::string openssl_dh::get_private_key() {
 
 	BIGNUM* key = nullptr;
 	if (!EVP_PKEY_get_bn_param(key_pair_.get(), OSSL_PKEY_PARAM_PRIV_KEY, &key)) {
-		return "";
+		return ""; //TODO use std::optional<std::string>
 	}
 	std::unique_ptr<BIGNUM, deleter<BN_free>> privateKeyHolder{key};
 	return convert_bn_to_hex(key);

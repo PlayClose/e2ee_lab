@@ -10,6 +10,7 @@ void x509_certificate::set_cert_ca(std::unique_ptr<X509, deleter<X509_free>> ca_
 }
 
 void x509_certificate::set_cert_csr(std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert) {
+//void x509_certificate::set_cert_csr(std::unique_ptr<X509, deleter<X509_free>> csr_cert) {
 	csr_cert_ = std::move(csr_cert);
 }
 
@@ -24,6 +25,29 @@ std::string x509_certificate::x509_to_pem() {
 	}
 	//Write certificate in PEM format to BIO
 	if(!PEM_write_bio_X509(bio.get(), ca_cert_.get())) {
+		throw std::runtime_error("Failed to write certificate to BIO");
+	}
+	//Get the PEM data from BIO
+	char* pem_data = nullptr;
+	auto pem_size = BIO_get_mem_data(bio.get(), &pem_data);
+	if(pem_size <= 0 || !pem_data) {
+		throw std::runtime_error("Failed to get PEM data from BIO");
+	}
+
+	return std::string(pem_data, pem_size);
+}
+
+std::string x509_certificate::x509_to_pem(X509* cert) {
+	if(!cert) {
+		throw std::runtime_error("Invalid certificate pointer");
+	}
+	//Create memory BIO to hold PEM data
+	std::unique_ptr<BIO, deleter<BIO_free>> bio(BIO_new(BIO_s_mem()));
+	if(!bio) {
+		throw std::runtime_error("Failed to create BIO");
+	}
+	//Write certificate in PEM format to BIO
+	if(!PEM_write_bio_X509(bio.get(), cert)) {
 		throw std::runtime_error("Failed to write certificate to BIO");
 	}
 	//Get the PEM data from BIO
@@ -137,8 +161,13 @@ void x509_certificate::generate_csr(const std::string& commonName) {
 }
 
 std::unique_ptr<X509, deleter<X509_free>> x509_certificate::sign_csr(X509_REQ* req, int daysValid) {
-	//, EVP_PKEY* caKey, X509* caCert,
     std::unique_ptr<X509, deleter<X509_free>> cert{X509_new()};
+	if(!ca_cert_) {
+		throw std::runtime_error("root cert is not set");
+	}
+	if(!key_pair_){
+		throw std::runtime_error("root key is not set");
+	}
     if(!cert) {
         throw std::runtime_error("Failed to create X509 certificate");
     }
@@ -232,7 +261,7 @@ void x509_certificate::generate_self_signed_ca(const std::string& common_name, i
 }
 
 //Parse cert:
-// Helper function to print ASN1_TIME
+//Helper function to print ASN1_TIME
 static std::string asn1_time_to_string(const ASN1_TIME* time) {
     std::unique_ptr<BIO, deleter<BIO_free>> bio(BIO_new(BIO_s_mem()));
     ASN1_TIME_print(bio.get(), time);
@@ -241,7 +270,7 @@ static std::string asn1_time_to_string(const ASN1_TIME* time) {
     return std::string(data, len);
 }
 
-// Helper function to print X509_NAME
+//Helper function to print X509_NAME
 static std::string x509_name_to_string(X509_NAME* name) {
     std::unique_ptr<BIO, deleter<BIO_free>> bio(BIO_new(BIO_s_mem()));
     X509_NAME_print_ex(bio.get(), name, 0, XN_FLAG_RFC2253);
@@ -250,7 +279,7 @@ static std::string x509_name_to_string(X509_NAME* name) {
     return std::string(data, len);
 }
 
-// Helper function to print public key info
+//Helper function to print public key info
 static std::string public_key_info(EVP_PKEY* pkey) {
     std::unique_ptr<BIO, deleter<BIO_free>> bio(BIO_new(BIO_s_mem()));
     EVP_PKEY_print_public(bio.get(), pkey, 0, nullptr);
@@ -260,15 +289,14 @@ static std::string public_key_info(EVP_PKEY* pkey) {
 }
 
 //Parse X509 certificate
-//TODO if cert_ca gives from csr, need to parse on root_ca pub key
 //retun 0 - success, else return 1
-int x509_certificate::parse_x509_ca(X509* cert) {
+int x509_certificate::parse_x509_ca(X509* cert, X509* cert_root) {
     if(!cert) {
         throw std::invalid_argument("Certificate cannot be null");
     }
-    // Version
+    //Version
     std::cout << "Version: " << X509_get_version(cert) + 1 << std::endl;
-    // Serial Number
+    //Serial Number
     ASN1_INTEGER* serial = X509_get_serialNumber(cert);
 	std::unique_ptr<BIGNUM, deleter<BN_free>> bn{ASN1_INTEGER_to_BN(serial, nullptr)};
 	//TODO replace with common misc.h
@@ -283,8 +311,15 @@ int x509_certificate::parse_x509_ca(X509* cert) {
     //Issuer
     std::cout << "Issuer: " << x509_name_to_string(X509_get_issuer_name(cert)) << std::endl;
     //Public Key
-    std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> pkey(X509_get_pubkey(cert));
-    std::cout << "Public Key:\n" << public_key_info(pkey.get()) << std::endl;
+	std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> pkey;
+	if(!cert_root) {
+    	pkey.reset(X509_get_pubkey(cert));
+    	std::cout << "Public Key:\n" << public_key_info(pkey.get()) << std::endl;
+	}
+	else {
+		pkey.reset(X509_get_pubkey(cert_root));
+    	std::cout << "Public Key:\n" << public_key_info(pkey.get()) << std::endl;
+	}	
     //Extensions
     std::cout << "\nExtensions:" << std::endl;
     for(int i = 0; i < X509_get_ext_count(cert); i++) {

@@ -15,7 +15,9 @@
 #include <boost/asio.hpp>
 #include <cryptoapi/crypto_api.h>
 #include <cryptoapi/misc.h>
-#include <include/msg.h>
+#include <include/msg_e2e.h>
+#include <include/msg_cli_srv.h>
+#include <string_view>
 
 using boost::asio::ip::tcp;
 auto constexpr delay = 1000;
@@ -26,7 +28,7 @@ int main(int argc, char* argv[])
 {
 	try
 	{
-		if (argc != 2)
+		if (argc != 3)
 		{
 		  std::cerr << "Usage: client <host>" << std::endl;
 		  return 1;
@@ -37,175 +39,186 @@ int main(int argc, char* argv[])
 		tcp::socket socket(io_context);
 		boost::asio::connect(socket, resolver.resolve(argv[1], "9090"));
 
+		size_t len;
 		std::string buf;
 		buf.resize(1000);
 		boost::system::error_code error;
 		
+		auto recv {
+			[&socket]() -> std::string {
+				boost::system::error_code error;
+				std::string buf;
+				buf.resize(2000);
+				int len = socket.read_some(boost::asio::buffer(buf), error);
+				std::cout << "RCV len: " << len << std::endl;
+				if (error == boost::asio::error::eof)
+					return std::string{}; // Connection closed cleanly by peer.
+				else if (error)
+					throw boost::system::system_error(error); // Some other error.	
+
+				return buf;
+			}
+		};	
+	
+		auto send {
+			[&socket](std::string_view msg) {
+				socket.write_some(boost::asio::buffer(msg));
+			}
+		};
+				
+		std::string srv_pub_key_callback;	
+		//Init api by default for working with certificates		
+		std::shared_ptr<playclose::crypto::api<
+				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>,
+				playclose::crypto::openssl_dh,
+				playclose::crypto::aes>>
+		crypt = playclose::crypto::get_api<playclose::crypto::ClientPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(512);
+		auto msg = std::make_unique<	
+									playclose::misc::msg_cli_srv<
+														playclose::crypto::openssl_dh, 
+														playclose::crypto::aes, 
+														playclose::crypto::client_certificate>>
+												(crypt, [&srv_pub_key_callback]{return srv_pub_key_callback;});
 		//TODO certificates tasks:
-		//RCV root server sertificate
+		//RCV root server certificate
+		auto root_cert = recv();	
+		std::cout << "RCV root_cert: " << root_cert << std::endl;
+		//Verify root cert
+		if(crypt->verify_cert(root_cert)) {
+			throw std::runtime_error("Root cert is not valid!");
+		}
 		//SND request for certificate signing
+		std::cout << "Client name: " << argv[2] << std::endl;
+		auto client_cert_req = crypt->generate_cert(argv[2]);
+		std::cout << "SND client_cert_req: " << client_cert_req << std::endl;
+		auto [client_cert_header, client_cert_payload] = msg->build_msg("sign certificate", client_cert_req);
+		send(client_cert_header + client_cert_payload);
+
 		//RCV certificate, signed by server
-		//verify that certifiacate -> need take key from root server certificate 
-
+		auto [cmd, user_cert] = msg->parse_msg_cli_srv(recv());
+		std::cout << "RCV certificate, signed by server: " << user_cert << std::endl;
+		if(cmd == "sign sertificate") {
+			if(crypt->verify_cert(user_cert)) {
+				throw std::runtime_error("User cert is not valid!");
+			}
+			std::cout << "Cert is correct!" << std::endl;
+		}
+		//SND Request to prime: 
+		//TODO add prime inside cert
+		auto [get_prime_header, get_prime_payload] = msg->build_msg("get prime");
+		std::cout << "SND: get prime" << std::endl;
+		send(get_prime_header + get_prime_payload);
 		//RCV prime
-		size_t len = socket.read_some(boost::asio::buffer(buf), error);
-		if (error == boost::asio::error::eof)
-			return -1; // Connection closed cleanly by peer.
-		else if (error)
-			throw boost::system::system_error(error); // Some other error.
-
-		auto crypt = playclose::crypto::get_api<playclose::crypto::ClientPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(buf, "2");
-		std::cout << "RCV prime: " << buf << std::endl;
-		std::cout << std::endl;
+		auto [cmd2, prime] = msg->parse_msg_cli_srv(recv());
+		if(cmd2 == "get prime") {
+			crypt->set_prime(prime);
+			std::cout << "RCV prime: " << prime << std::endl;
+			std::cout << std::endl;
+		}
 
 		//SND cli_pub_key
-		std::cout << "SND cli_pub_key: " << crypt->get_pub_key() << std::endl;
-		socket.write_some(boost::asio::buffer("128" + crypt->get_pub_key()));
+		auto [pub_key_header, pub_key_payload] = msg->build_msg("pubkey", crypt->get_pub_key());
+		std::cout << "SND cli pubkey: " << crypt->get_pub_key() << std::endl;
+		send(pub_key_header + pub_key_payload);
 		
 		//RCV srv_pub_key
-		len = socket.read_some(boost::asio::buffer(buf), error);
-		if (error == boost::asio::error::eof)
-			return -1; // Connection closed cleanly by peer.
-		else if (error)
-			throw boost::system::system_error(error); // Some other error.
-		std::cout << "RCV srv_pub_key: " << buf << std::endl;
-		std::string srv_pub_key = buf;
-		
-		//SND crypt
-		std::string crypt_msg = "016" + crypt->encrypt(srv_pub_key, "connect_with_cli");
-		std::cout << "SND crypt: " << crypt_msg << std::endl;
-		socket.write_some(boost::asio::buffer(crypt_msg));
-		
-		//RCV own id	
-		buf.clear();
-		buf.resize(1000);
-		len = socket.read_some(boost::asio::buffer(buf), error);
-		if (error == boost::asio::error::eof)
-			return -1; // Connection closed cleanly by peer.
-		else if (error)
-			throw boost::system::system_error(error); // Some other error.
-		
-		std::string str_msg_size = buf.substr(0, 3);
-		int int_msg_size = std::stoi(str_msg_size);
-		buf = buf.substr(3, int_msg_size);
+		auto [cmd3, srv_pub_key] = msg->parse_msg_cli_srv(recv());
+		if(cmd3 != "pubkey") {
+			throw std::runtime_error("expected srv pubkey, but received: " + cmd3);
+		}	
+		std::cout << "RCV srv pubkey: " << srv_pub_key << std::endl;
+		srv_pub_key_callback = srv_pub_key;
 
-		std::cout << "RCV id: " << buf << std::endl;
-		
-		//Choose opposite id
-		
-		std::string id =  crypt->decrypt(srv_pub_key, buf).substr(0,1);
-		std::cout << "Id: " << id << std::endl;
-		std::string dst;	
-		if(id == "1"){
-			id = "001";
-			dst = "002";
-		}
-		else if(id == "2") {
-			id = "002";
-			dst = "001";
+		//SND crypt request for id
+		auto [connect_header, connect_payload] = msg->build_msg("connect id", "", playclose::misc::msg_attribute::encrypt);
+		std::cout << "SND crypt: connect id" << std::endl;
+		send(connect_header + connect_payload);
+		//RCV own id	
+		auto [cmd4, id] = msg->parse_msg_cli_srv(recv());
+		if(cmd4 != "connect id") {
+			throw std::runtime_error("Can't process cmd: " + cmd4);
 		}
 		std::cout << "Own ID: " << id << std::endl;
-		std::string prime_e2e = crypt->decrypt(srv_pub_key, buf).substr(1, 128);
+		//SND crypt request for prime 
+		auto [prime_header, prime_payload] = msg->build_msg("connect prime", "", playclose::misc::msg_attribute::encrypt);
+		std::cout << "SND crypt: connect prime" << std::endl;
+		send(prime_header + prime_payload);
+		//RCV own id	
+		auto [cmd5, prime_e2e] = msg->parse_msg_cli_srv(recv());
+		if(cmd5 != "connect prime") {
+			throw std::runtime_error("Can't process cmd: " + cmd5);
+		}
 		std::cout << "Prime e2e: " << prime_e2e << std::endl;
+
+		//Choose opposite id
+		std::string dst;
+		if(id == "1"){
+			dst = "2";
+		}
+		else if(id == "2") {
+			dst = "1";
+		}
+
 		//TODO auto doesn't work, make wrapper
-		std::shared_ptr<playclose::crypto::api< 
-				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>, 
-				playclose::crypto::openssl_dh, 
-				playclose::crypto::aes>> 
-		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ClientPolicy, 
-													playclose::crypto::openssl_dh, 
-													playclose::crypto::aes>(prime_e2e, "2");
-		//надо отправить pub_cli_key и id
+		std::shared_ptr<playclose::crypto::api<
+				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>,
+				playclose::crypto::openssl_dh,
+				playclose::crypto::aes>>
+		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ClientPolicy,
+													playclose::crypto::openssl_dh,
+													playclose::crypto::aes>(prime_e2e);
 		std::cout << "e2e cli_pub_key: " << crypt_e2e->get_pub_key() << std::endl;
-		//SND crypt
-		std::string e2e_pub_key_and_id = crypt->encrypt(srv_pub_key, "_pub_cli_key_id_" + id + crypt_e2e->get_pub_key());
-		std::string e2e_crypt_msg = std::to_string(e2e_pub_key_and_id.size()) + e2e_pub_key_and_id;
-		std::cout << "SND crypt: " << e2e_crypt_msg << std::endl;
-		socket.write_some(boost::asio::buffer(e2e_crypt_msg));
+		//SND crypt id + e2e_pub_key
+		auto [e2e_header, e2e_payload] = msg->build_msg("id and key", id + ":" + crypt_e2e->get_pub_key(), playclose::misc::msg_attribute::encrypt);
+		send(e2e_header + e2e_payload);
 		
-		//read key_accepted____
-		//RCV
-		buf.clear();
-		buf.resize(1000);
-		len = socket.read_some(boost::asio::buffer(buf), error);
-		if (error == boost::asio::error::eof)
-			return -1; // Connection closed cleanly by peer.
-		else if (error)
-			throw boost::system::system_error(error); // Some other error.
-		
-		str_msg_size = buf.substr(0, 3);
-		int_msg_size = std::stoi(str_msg_size);
-		buf = buf.substr(3, int_msg_size);
-		std::string cmd =  crypt->decrypt(srv_pub_key, buf);
-		std::cout << "cmd: " << cmd << std::endl;		
+		//RCV accepted 
+		auto [cmd6, a]= msg->parse_msg_cli_srv(recv());
+		std::cout << "cmd: " << cmd6 << " answer: " << a << std::endl;		
 
 		//------------------------------------------------------------------------------------------------------------
 		//receiving pub_key of opposite node
 		std::string list_of_clients;
 		std::string opposite_node_pub_key;
-
 		do {
-			//show_list_of_clients
-			//SND crypt
-			std::string cmd {"gets_list_of_cli"};
-			std::string test_crypt = crypt->encrypt(srv_pub_key, cmd);
-			std::cout << crypt->decrypt(srv_pub_key, test_crypt) << std::endl;
-			std::string crypt_list_of_clients = "016" + test_crypt;
-			std::cout << "__dgb_ test_crypt.size(): " << test_crypt.size() << std::endl;
-			//std::string crypt_list_of_clients = "064" + convert_data_to_hex(test_crypt);
-			std::cout << "SND crypt: " << crypt_list_of_clients << std::endl;
-			socket.write_some(boost::asio::buffer(crypt_list_of_clients));
-			
-			//RCV list of cli and keys
-			buf.clear();
-			buf.resize(1000);
-			len = socket.read_some(boost::asio::buffer(buf), error);
-
-			std::string str_msg_size = buf.substr(0, 3);
-			int int_msg_size = std::stoi(str_msg_size);
-			buf = buf.substr(3, int_msg_size);
-			std::cout << "RCV: " << buf << " size: " << buf.size() << std::endl;
-
-			if (error == boost::asio::error::eof)
-				return -1; // Connection closed cleanly by peer.
-			else if (error)
-				throw boost::system::system_error(error); // Some other error.
-			std::cout << "RCV list_of_clients: " << buf << std::endl;
-			list_of_clients =  crypt->decrypt(srv_pub_key, buf);
+			//show_list_of_clients 
+			//SND crypt "cli list"
+			auto [cli_list_header, cli_list_payload] = msg->build_msg("cli list", "", playclose::misc::msg_attribute::encrypt);
+			send(cli_list_header + cli_list_payload);
+			//RCV cli list
+			auto [cmd, list_of_clients] = msg->parse_msg_cli_srv(recv());
+			if(cmd != "cli list") {
+				throw std::runtime_error("Can't process cmd: " + cmd);
+			}
 			std::cout << "list_of_clients: " << list_of_clients << std::endl;
 			std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-
 			opposite_node_pub_key = find_key_in_list(list_of_clients, dst);
-
 		} while(opposite_node_pub_key.empty());
 		//------------------------------------------------------------------------------------------------------------
 		tcp::socket socket_e2e(io_context);
 		boost::asio::connect(socket, resolver.resolve(argv[1], "9091"));
 		std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 		
-
 		//Init client on e2e_node 
 		/*std::unique_ptr<playclose::misc::msg<playclose::crypto::openssl_dh, 
 						playclose::crypto::aes, 
 						playclose::crypto::server_certificate>>*/
-		auto msg = std::make_unique<playclose::misc::msg<playclose::crypto::openssl_dh, 
-														 playclose::crypto::aes, 
-														 playclose::crypto::client_certificate>>
+		auto msg_e2e = std::make_unique<
+									playclose::misc::msg_e2e<
+														playclose::crypto::openssl_dh, 
+														playclose::crypto::aes, 
+														playclose::crypto::client_certificate>>
 								(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
-		//msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 		
-		auto msg_init = msg->build_msg_e2e(id, id, crypt_e2e->get_pub_key());
+		auto msg_init = msg_e2e->build_msg_e2e(id, id, crypt_e2e->get_pub_key());
 		std::cout << "Init client on e2e_node SND: " + msg_init.first + msg_init.second << std::endl;
 		socket.write_some(boost::asio::buffer(msg_init.first + msg_init.second));
 
-		//std::cout << "Init client on e2e_node SND: " + id + id + "008" + "128" + crypt_e2e->get_pub_key() << std::endl;
-		//socket.write_some(boost::asio::buffer(id + id + "128" + crypt_e2e->get_pub_key()));
-			
 		std::mutex m;
 		std::condition_variable cv_snd, cv_rcv;
 		std::atomic<bool> ready = true;
 
-		std::thread recv ([&]() {
+		std::thread receiver([&]() {
 			while(1) {
 				std::unique_lock<std::mutex> lock(m);
 				cv_rcv.wait(lock, [&ready]{return !ready.load();});
@@ -216,11 +229,9 @@ int main(int argc, char* argv[])
 					return -1; // Connection closed cleanly by peer.
 				else if (error)
 					throw boost::system::system_error(error); // Some other error.
-				//buf = buf.substr(0, 16);
 				std::cout << "RCV crypt: " << buf <<  " RCV.size(): " << buf.size() << std::endl;
-				auto talk = msg->parse_msg_e2e(buf);
+				auto talk = msg_e2e->parse_msg_e2e(buf);
 				std::cout << "Decrypt: " << talk << " size: " << talk.size() <<  std::endl;
-				//std::cout << "Decrypt: " <<  crypt_e2e->decrypt(opposite_node_pub_key, buf) << std::endl;
 				//std::cout << "RCV: " << buf << std::endl;
 				ready.store(true);
 				cv_snd.notify_one();
@@ -228,18 +239,15 @@ int main(int argc, char* argv[])
 			}
 		});
 		
-		std::thread send([&]() {
+		std::thread transmitter([&]() {
 			while(1) {
 				std::unique_lock<std::mutex> lock(m);
 				cv_snd.wait(lock, [&ready]{return ready.load();});
 				std::string payload = "now is free to write everything, wow" + id;
-				auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::encrypt);
+				auto talk = msg_e2e->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::encrypt);
 				//auto talk = msg->build_msg_e2e(id, dst, payload, playclose::misc::msg_attribute::none);
 				std::cout << "Talk on e2e_node SND: " + talk.first + talk.second << std::endl;
 				socket.write_some(boost::asio::buffer(talk.first + talk.second));
-
-				//std::cout << "__dbg_ payload size: " << payload.size() << std::endl;
-				//std::string msg = id + dst + len + payload ;
 				/*int repeat = 1;
 				while(repeat--) {
 					socket.write_some(boost::asio::buffer(msg));
@@ -250,11 +258,11 @@ int main(int argc, char* argv[])
 			}
 		});
 
-		if(recv.joinable()) {
-			recv.join();
+		if(receiver.joinable()) {
+			receiver.join();
 		}
-		if(send.joinable()) {
-			send.join();
+		if(transmitter.joinable()) {
+			transmitter.join();
 		}
 	}
 	catch (std::exception& e)

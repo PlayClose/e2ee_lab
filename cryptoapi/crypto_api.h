@@ -50,13 +50,21 @@ namespace playclose {
 		std::string get_prime() {
 			return key_negotiation_->get_prime();
 		}
+		void set_prime(const std::string& prime, const std::string& gen = "2") {
+			key_negotiation_->set_prime(prime, gen);
+		}
 		std::string get_pub_key() {
 			return key_negotiation_->get_pub_key();
 		}
 		std::string generate_cert(const std::string& name) {
 			return static_cast<certificate*>(this)->generate_cert(name);
-		}		
-		
+		}
+		int verify_cert(const std::string& cert) {
+			return static_cast<certificate*>(this)->verify_cert(cert);
+		}
+		std::string sign_cert(const std::string& csr_cert) {
+			return static_cast<certificate*>(this)->sign_cert(csr_cert);
+		}	
 	};
 	
 	template <typename key_negotiation, typename cipher>
@@ -75,6 +83,23 @@ namespace playclose {
 			cert_->generate_self_signed_ca(name);	
 			return cert_->x509_to_pem();
 		}
+	
+		std::string sign_cert(const std::string& pem_req) {
+			auto csr = cert_->pem_to_x509req(pem_req);
+			auto sign_cert  = cert_->sign_csr(csr.get());
+			return cert_->x509_to_pem(sign_cert.get()); 
+		}
+
+		int verify_cert(const std::string& cert) {
+			//Server verify clients certificates
+			if(cert.empty()) {
+				return -1;
+			}
+			//TODO server must control cert's in case of date expiration, i.e. need to add cert's in queue
+			auto certificate = cert_->pem_to_x509req(cert);
+			//verify
+		 	return cert_->parse_x509_csr(certificate.get());
+		}
 	};
 
 	/*template<typename... Args>
@@ -84,6 +109,7 @@ namespace playclose {
 	class client_certificate : public api<client_certificate<key_negotiation, cipher>, key_negotiation, cipher>
 	{
 		std::unique_ptr<x509_certificate> cert_;
+		
 	public:
 		template<typename ... Args>
 		client_certificate(Args&& ... args) :
@@ -95,8 +121,38 @@ namespace playclose {
 			cert_->generate_csr(client_name);
 			return cert_->x509req_to_pem();
 		}
+		
+		std::string sign_cert(const std::string& pem_req) {
+			throw std::logic_error("need to realise it, seems useful feature");
+		};
+
+		int verify_cert(const std::string& cert) {
+			int res = -1;
+			//Client verify servers certificates
+			if(cert.empty()) {
+				return res;
+			}
+			auto certificate = cert_->pem_to_x509(cert);
+			if(!is_root_cert_set()) {
+				//verify
+				res = cert_->parse_x509_ca(certificate.get());
+				if(!res) {
+					//set ca_cert as root
+					cert_->set_ca_cert(std::move(certificate));
+				}
+			}
+			else {
+				res = cert_->parse_x509_ca(certificate.get(), cert_->ca_cert_.get());	
+			}
+			return res;
+		}
+	private:
+		bool is_root_cert_set() {
+			return cert_->is_root_cert_set();
+		}
 	};
 
+	//TODO use sfinae instead of constexpr
 	template <typename Policy, typename Proto, typename Cipher, typename ... Args, std::enable_if_t<(sizeof...(Args) <= 10)>* = nullptr>
  	auto get_api(Args... args) {
 		if constexpr(std::is_same<Policy, ServerPolicy>::value) {

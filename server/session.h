@@ -2,7 +2,8 @@
 #include <chrono>
 #include <boost/asio.hpp>
 #include <cryptoapi/crypto_api.h>
-#include <include/msg.h>
+#include <include/msg_e2e.h>
+#include <include/msg_cli_srv.h>
 #include "db.h"
 
 
@@ -13,7 +14,7 @@ namespace playclose {
 
 	auto constexpr key_size = 128;
 	auto constexpr msg_size = 16;
-	auto constexpr buf_size = 1000;
+	auto constexpr buf_size = 2000;
 
 	enum class state
 	{
@@ -47,14 +48,16 @@ namespace playclose {
 		tcp::socket socket_;
 		std::string cli_pub_key_;
 		std::shared_ptr<crypto::api<Cert, Proto, Cipher>> crypt_;
-		std::unique_ptr<misc::msg<Proto, Cipher, C>> msg_;
+		std::unique_ptr<misc::msg_e2e<Proto, Cipher, C>> msg_e2e_;
+		std::unique_ptr<misc::msg_cli_srv<Proto, Cipher, C>> msg_;
 		std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections_;
 		boost::asio::cancellation_signal cancel_signal_;
 	public:
 		session(boost::asio::io_context& io_context, int id, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections,
 			const std::string& prime, std::function<std::string (void)> callback) :
 			crypt_(crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)),
-			msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
+			msg_e2e_(std::make_unique<misc::msg_e2e<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
+			msg_(std::make_unique<misc::msg_cli_srv<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})), //TODO mb there is using another key
 			socket_(io_context),
 			str_id_(std::to_string(id)),
 			connections_(connections),
@@ -66,7 +69,8 @@ namespace playclose {
 		};
 		session(boost::asio::io_context& io_context, std::vector<std::shared_ptr<session<Proto, Cipher>>>& connections) :
 			crypt_(crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)),
-			msg_(std::make_unique<misc::msg<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
+			msg_e2e_(std::make_unique<misc::msg_e2e<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
+			msg_(std::make_unique<misc::msg_cli_srv<Proto, Cipher, C>>(crypt_, [this]{return cli_pub_key_;})),
 			socket_(io_context),
 			connections_(connections),
 			state_(state::init),
@@ -97,7 +101,7 @@ namespace playclose {
 
 		void read_cli_srv() {
 			buf_.clear();
-			buf_.resize(1000);
+			buf_.resize(buf_size);
 			socket_.async_read_some(boost::asio::buffer(buf_, buf_size), 			
 				[this](boost::system::error_code const& er, size_t size) 
 					{
@@ -106,52 +110,57 @@ namespace playclose {
 							std::cout << "__dbg_ read error: " << buf_; //TODO add async logging
 						}
 						else {	
-							std::cout << "RCV raw: " << buf_ << " size: " << buf_.size() <<  std::endl;
-							std::string str_msg_size = buf_.substr(0, 3);
-							int int_msg_size = std::stoi(str_msg_size);
-							buf_ = buf_.substr(3, int_msg_size);
-							std::cout << "RCV: " << buf_ << " size: " << buf_.size() << std::endl;
-							//TODO сделать нормальный протокол cli<->srv
-							if(int_msg_size == key_size) {
-								cli_pub_key_ = buf_;
-								write_cli_srv(crypt_->get_pub_key());
+							auto [cmd, data] = msg_->parse_msg_cli_srv(buf_);
+							std::cout << "RCV cmd: "<< cmd << " data: " << data << std::endl;
+				
+							if(cmd == "sign certificate") {
+								auto sign_csr_cert = crypt_->sign_cert(data);
+								auto [header, payload] = msg_->build_msg(cmd, sign_csr_cert);
+								write_cli_srv(header + payload);
 							}
-							else {
-								buf_ = crypt_->decrypt(cli_pub_key_, buf_);
-								std::string cmd = buf_.substr(0,16);
-								std::cout << "Decrypted: " << cmd << std::endl;
-								//cmd, i.e. client server talking
-								if(cmd == "connect_with_cli") {	
-									//send own client id, cause client doesn't know his id
-									//тут надо отправить прайм единый для всех пользователей
-									std::string prime_msg = crypt_->encrypt(cli_pub_key_, str_id_ + prime_);
-									write_cli_srv(std::to_string(prime_msg.size()) + prime_msg);
-								}
-								else if(cmd == "gets_list_of_cli") {
-									std::string crypt_msg = crypt_->encrypt(cli_pub_key_, db::get_instance()->serialize_keys());	
-									write_cli_srv(std::to_string(crypt_msg.size()) + crypt_msg);
-								}
-								else if(cmd == "_pub_cli_key_id_") {
-										std::string str_id = buf_.substr(16, 3);	
-										std::string cli_pub_key = buf_.substr(19, 128); 
-										db::get_instance()->save_key(str_id, cli_pub_key);
-										std::string msg = "key_accepted____";
-										write_cli_srv("016" + crypt_->encrypt(cli_pub_key_, msg));
-								}
-								else {
-									std::cout << "cmd is not defined: " << cmd << std::endl;
-								}
+							else if(cmd == "get prime") {
+								auto prime = crypt_->get_prime();
+								auto [header, payload] = msg_->build_msg(cmd, prime);
+								write_cli_srv(header + payload);
+							}
+							else if(cmd == "pubkey") {
+								cli_pub_key_ = data;	
+								auto srv_pub_key = crypt_->get_pub_key();
+								auto [header, payload] = msg_->build_msg(cmd, srv_pub_key);
+								write_cli_srv(header + payload);
+							}	
+							else if(cmd == "connect id") {
+								auto [header, payload] = msg_->build_msg(cmd, str_id_, playclose::misc::msg_attribute::encrypt);
+								write_cli_srv(header + payload);
+
+							}
+							else if(cmd == "connect prime") {
+								auto [header, payload] = msg_->build_msg(cmd, prime_, playclose::misc::msg_attribute::encrypt);
+								write_cli_srv(header + payload);
+
+							}
+							else if(cmd == "id and key") {
+								auto pos = data.find(':');
+								std::string id = data.substr(0, pos);
+								std::string pub_key = data.substr(pos+1);
+								db::get_instance()->save_key(id, pub_key);
+								auto [header, payload] = msg_->build_msg(cmd, "accepted", playclose::misc::msg_attribute::encrypt);
+								write_cli_srv(header + payload);
+							}
+							else if(cmd == "cli list") {
+								auto [header, payload] = msg_->build_msg(cmd, db::get_instance()->serialize_keys(), 
+																				playclose::misc::msg_attribute::encrypt);
+								write_cli_srv(header + payload);
+							}
+							else {			
+								std::runtime_error("command is not supported");
 							}
 						}
 					});
 		}
 		
 		void cli_srv_channel() {
-			 write_cli_srv(crypt_->get_prime());
-			//TODO send root certificate
-			//auto root_cert = crypt_->generate_x509();
-			//auto msg = crypt_->X509_to_pem();
-			//write_cli_srv(msg);
+			write_cli_srv(crypt_->generate_cert("root"));
 		}
 	
 		void e2e_channel_read() {
@@ -162,7 +171,7 @@ namespace playclose {
 		}
 		void read_e2e() {
 			buf_.clear();
-			buf_.resize(1000);
+			buf_.resize(buf_size);
 			set_state(state::reading);
 			socket_.async_read_some(boost::asio::buffer(buf_, buf_size),
 				boost::asio::bind_cancellation_slot(
@@ -177,7 +186,7 @@ namespace playclose {
 							}
 							else {	
 								std::string src, dst;
-								auto payload = msg_->transfer_e2e(buf_, src, dst);
+								auto payload = msg_e2e_->transfer_e2e(buf_, src, dst);
 								if(!payload.second.empty()) { //TODO for what? to avoid null msg?
 									db::get_instance()->save(dst, payload.first + payload.second);
 								}
@@ -216,7 +225,7 @@ namespace playclose {
 						}
 						else {	
 							std::string src, dst;
-							auto payload = msg_->transfer_e2e(buf_, src, dst);
+							auto payload = msg_e2e_->transfer_e2e(buf_, src, dst);
 							if(src == dst) { //TODO check attr if need it
 								str_id_ = src;
 								cli_pub_key_ = payload.second;
