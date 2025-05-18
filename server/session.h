@@ -160,7 +160,13 @@ namespace playclose {
 		}
 		
 		void cli_srv_channel() {
-			write_cli_srv(crypt_->generate_cert("root"));
+			if(pem_ca_callback_) {
+				crypt_->set_cert(pem_ca_callback_());
+				write_cli_srv(pem_ca_callback_());
+			}
+			else {
+				throw std::runtime_error("root certificate is not set");
+			}
 		}
 	
 		void e2e_channel_read() {

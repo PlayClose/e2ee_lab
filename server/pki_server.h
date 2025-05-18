@@ -26,7 +26,9 @@ namespace playclose {
 			  prime_{},
 			  pem_ca_{}
 		{
-			prime_ = crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512, 2)->get_prime();	
+			auto crypt = crypto::get_api<crypto::ServerPolicy, Proto, Cipher>(512);
+			prime_ = crypt->get_prime();	
+			pem_ca_ = crypt->generate_cert("root");
 			start_accept();
 		}
 	private:

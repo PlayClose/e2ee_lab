@@ -59,12 +59,15 @@ namespace playclose {
 		std::string generate_cert(const std::string& name) {
 			return static_cast<certificate*>(this)->generate_cert(name);
 		}
+		void set_cert(const std::string& cert) {
+			return static_cast<certificate*>(this)->set_cert(cert);
+		}
 		int verify_cert(const std::string& cert) {
 			return static_cast<certificate*>(this)->verify_cert(cert);
 		}
 		std::string sign_cert(const std::string& csr_cert) {
 			return static_cast<certificate*>(this)->sign_cert(csr_cert);
-		}	
+		}
 	};
 	
 	template <typename key_negotiation, typename cipher>
@@ -78,6 +81,9 @@ namespace playclose {
 			cert_(std::make_unique<x509_certificate>())
 		{}
 
+		void set_cert(const std::string& cert) {
+			cert_->set_cert_ca(cert);
+		}
 		//TODO use std::string_view
 	 	std::string generate_cert(const std::string& name) {
 			cert_->generate_self_signed_ca(name);	
@@ -116,6 +122,10 @@ namespace playclose {
 			api<client_certificate<key_negotiation, cipher>, key_negotiation, cipher>(std::forward<Args>(args)...), 	
 			cert_(std::make_unique<x509_certificate>())
 		{}
+	
+		void set_cert(const std::string& cert) {
+			cert_->set_cert_csr(cert); //TODO 
+		}	
 
 		std::string generate_cert(const std::string& client_name) {
 			cert_->generate_csr(client_name);

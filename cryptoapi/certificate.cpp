@@ -9,9 +9,16 @@ void x509_certificate::set_cert_ca(std::unique_ptr<X509, deleter<X509_free>> ca_
 	ca_cert_ = std::move(ca_cert);
 }
 
+void x509_certificate::set_cert_ca(const std::string& cert) {
+	set_cert_ca(pem_to_x509(cert));
+}
+
 void x509_certificate::set_cert_csr(std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert) {
-//void x509_certificate::set_cert_csr(std::unique_ptr<X509, deleter<X509_free>> csr_cert) {
 	csr_cert_ = std::move(csr_cert);
+}
+
+void x509_certificate::set_cert_csr(const std::string& cert) {
+	set_cert_csr(pem_to_x509req(cert));
 }
 
 std::string x509_certificate::x509_to_pem() {

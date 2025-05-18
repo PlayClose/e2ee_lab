@@ -51,7 +51,9 @@ namespace playclose {
 		std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> pem_to_x509req(const std::string& pem_data);
 		std::unique_ptr<X509, deleter<X509_free>> sign_csr(X509_REQ* req, int daysValid = 365);
 		void set_cert_ca(std::unique_ptr<X509, deleter<X509_free>> ca_cert);
+		void set_cert_ca(const std::string& cert);
 		void set_cert_csr(std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert);
+		void set_cert_csr(const std::string& cert);
 	private:
 		std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> generate_rsa_keypair(int key_bits = 2048);
 	};
