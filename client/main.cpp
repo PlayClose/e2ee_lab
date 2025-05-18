@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
 	{
 		if (argc != 3)
 		{
-		  std::cerr << "Usage: client <host>" << std::endl;
+		  std::cerr << "Usage: client <host> <user_name>" << std::endl;
 		  return 1;
 		}
 
@@ -232,7 +232,6 @@ int main(int argc, char* argv[])
 				std::cout << "RCV crypt: " << buf <<  " RCV.size(): " << buf.size() << std::endl;
 				auto talk = msg_e2e->parse_msg_e2e(buf);
 				std::cout << "Decrypt: " << talk << " size: " << talk.size() <<  std::endl;
-				//std::cout << "RCV: " << buf << std::endl;
 				ready.store(true);
 				cv_snd.notify_one();
 			
