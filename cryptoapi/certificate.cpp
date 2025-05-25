@@ -6,7 +6,7 @@ namespace playclose {
 	namespace crypto {
 
 void x509_certificate::set_cert_ca(std::unique_ptr<X509, deleter<X509_free>> ca_cert) {
-	ca_cert_ = std::move(ca_cert);
+	root_cert_ = std::move(ca_cert);
 }
 
 void x509_certificate::set_cert_ca(const std::string& cert) {
@@ -22,7 +22,7 @@ void x509_certificate::set_cert_csr(const std::string& cert) {
 }
 
 std::string x509_certificate::x509_to_pem() {
-	if(!ca_cert_) {
+	if(!root_cert_) {
 		throw std::runtime_error("Invalid certificate pointer");
 	}
 	//Create memory BIO to hold PEM data
@@ -31,7 +31,7 @@ std::string x509_certificate::x509_to_pem() {
 		throw std::runtime_error("Failed to create BIO");
 	}
 	//Write certificate in PEM format to BIO
-	if(!PEM_write_bio_X509(bio.get(), ca_cert_.get())) {
+	if(!PEM_write_bio_X509(bio.get(), root_cert_.get())) {
 		throw std::runtime_error("Failed to write certificate to BIO");
 	}
 	//Get the PEM data from BIO
@@ -169,7 +169,7 @@ void x509_certificate::generate_csr(const std::string& commonName) {
 
 std::unique_ptr<X509, deleter<X509_free>> x509_certificate::sign_csr(X509_REQ* req, int daysValid) {
     std::unique_ptr<X509, deleter<X509_free>> cert{X509_new()};
-	if(!ca_cert_) {
+	if(!root_cert_) {
 		throw std::runtime_error("root cert is not set");
 	}
 	if(!key_pair_){
@@ -181,7 +181,7 @@ std::unique_ptr<X509, deleter<X509_free>> x509_certificate::sign_csr(X509_REQ* r
     //Copy subject name from CSR
     X509_set_subject_name(cert.get(), X509_REQ_get_subject_name(req));
     //Set issuer name from CA certificate
-    X509_set_issuer_name(cert.get(), X509_get_subject_name(ca_cert_.get()));
+    X509_set_issuer_name(cert.get(), X509_get_subject_name(root_cert_.get()));
     //Set public key from CSR
     std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> pubkey{X509_REQ_get_pubkey(req)};
     X509_set_pubkey(cert.get(), pubkey.get());
@@ -345,7 +345,7 @@ int x509_certificate::parse_x509_ca(X509* cert, X509* cert_root) {
 	return 1;
 }
 
-//Parse X509 CSR
+//Parse X509 CSR, calls only on server side
 //retun 0 - success, else return 1
 int x509_certificate::parse_x509_csr(X509_REQ* csr) {
     if(!csr) {

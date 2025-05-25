@@ -46,20 +46,14 @@ namespace playclose {
 			pos += dst.size();
 			memcpy(header.data() + pos, std::to_string(static_cast<uint8_t>(flag)).data(), attr_length_size);
 			pos += attr_length_size;
+
 			if(flag == msg_attribute::encrypt) {
-				aligned_16bytes(_payload);
+				_payload = crypt_->encrypt(get_cli_pub_key_(), _payload);
 			}
+
 			sprintf(header.data() + pos, "%4ld", _payload.size());
 			
-			if(flag == msg_attribute::none) {
-				return std::make_pair(header, _payload);
-			}
-			else if (flag == msg_attribute::encrypt) {
-				return std::make_pair(header, crypt_->encrypt(get_cli_pub_key_(), _payload));
-			}
-			else {
-				throw(std::logic_error("attribute not supported"));
-			}
+			return std::make_pair(header, _payload);
 		}
 	
 		std::string parse_msg_e2e(const std::string& buf) {
@@ -73,7 +67,6 @@ namespace playclose {
 			}
 			else if(attr == static_cast<uint8_t>(msg_attribute::encrypt)) {
 				std::string decrypt_payload = crypt_->decrypt(get_cli_pub_key_(), payload);
-				remove_aligned_symbol(decrypt_payload);
 				return decrypt_payload;
 			}
 			else{
@@ -101,35 +94,6 @@ namespace playclose {
 			return std::make_pair(attr + payload_size, payload);
 		}
 		
-		void aligned_16bytes(std::string& payload) {
-			if(payload.empty()) {
-				return;
-			}
-			if(!(payload.size() % 16)) {
-				return;
-			}
-			else {
-				int need_to_add = 16 - payload.size() % 16;
-				for(auto i = 0; i < need_to_add; i++) {
-					payload += padding;	
-				}
-				return;
-			}
-		}
-
-		void remove_aligned_symbol(std::string& payload) {
-			if(payload.empty()) {
-					return;
-			}
-			for(auto i = 0; i < 16; i++) {
-				if(payload.back() == padding) {
-					payload.pop_back();
-				}
-				else {
-					return;
-				}
-			}
-		}
 	};
 
 	} // namespace misc

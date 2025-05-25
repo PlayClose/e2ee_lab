@@ -35,21 +35,15 @@ namespace playclose {
 			payload.resize(cmd_length_size + cmd.size() + data.size());
 			sprintf(payload.data(), "%3ld", cmd.size());
 			memcpy(payload.data() + cmd_length_size, (cmd + data).data(), cmd.size() + data.size());	
+			
 			if(flag == msg_attribute::encrypt) {
-				aligned_16bytes(payload);
+				payload = crypt_->encrypt(get_cli_pub_key_(), payload);
 			}
 
 			sprintf(header.data() + pos, "%4ld", payload.size());
 
-			if(flag == msg_attribute::none) {
-				return std::make_pair(header, payload);
-			}
-			else if (flag == msg_attribute::encrypt) {
-				return std::make_pair(header, crypt_->encrypt(get_cli_pub_key_(), payload));
-			}
-			else {
-				throw(std::logic_error("attribute not supported"));
-			}
+			return std::make_pair(header, payload);
+			
 		}
 		//@return std::pair<cmd, data>	
 		std::pair<std::string, std::string> parse_msg_cli_srv(const std::string& buf) {
@@ -71,7 +65,6 @@ namespace playclose {
 			}
 			else if(attr == static_cast<uint8_t>(msg_attribute::encrypt)) {
 				std::string decrypt_payload = crypt_->decrypt(get_cli_pub_key_(), payload);
-				remove_aligned_symbol(decrypt_payload);
 				auto pos = 0;
 				auto cmd_size = std::stoi(decrypt_payload.substr(pos, cmd_length_size));
 				pos = cmd_length_size;
@@ -84,36 +77,6 @@ namespace playclose {
 			}
 			else{
 				throw std::runtime_error("attribut is not supported: " + std::to_string(attr));
-			}
-		}
-
-		void aligned_16bytes(std::string& payload) {
-			if(payload.empty()) {
-				return;
-			}
-			if(!(payload.size() % 16)) {
-				return;
-			}
-			else {
-				int need_to_add = 16 - payload.size() % 16;
-				for(auto i = 0; i < need_to_add; i++) {
-					payload += padding;	
-				}
-				return;
-			}
-		}
-
-		void remove_aligned_symbol(std::string& payload) {
-			if(payload.empty()) {
-					return;
-			}
-			for(auto i = 0; i < 16; i++) {
-				if(payload.back() == padding) {
-					payload.pop_back();
-				}
-				else {
-					return;
-				}
 			}
 		}
 	};

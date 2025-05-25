@@ -20,25 +20,24 @@ namespace playclose {
 	
 	class x509_certificate
 	{
-		std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert_;
+		std::unique_ptr<X509_REQ, deleter<X509_REQ_free>> csr_cert_; //TODO doubt the need
 		std::unique_ptr<EVP_PKEY, deleter<EVP_PKEY_free>> key_pair_;
 	public:
-		std::unique_ptr<X509, deleter<X509_free>> ca_cert_;
+		std::unique_ptr<X509, deleter<X509_free>> root_cert_;
+		std::unique_ptr<X509, deleter<X509_free>> node_cert_;
 		x509_certificate() :
-			ca_cert_{nullptr},
+			root_cert_{nullptr},
+			node_cert_{nullptr},
 			csr_cert_{nullptr},
 			key_pair_{generate_rsa_keypair()}
 		{}
 		~x509_certificate() = default;
 		
-		void set_ca_cert(std::unique_ptr<X509, deleter<X509_free>> ca_cert){
-			ca_cert_ = std::move(ca_cert);
+		void set_root_cert(std::unique_ptr<X509, deleter<X509_free>> cert){
+			root_cert_ = std::move(cert);
 		}
 		bool is_root_cert_set() {
-			return ca_cert_ ? 1 : 0;
-		}
-		const X509* get_ca_cert_ptr() {
-			return ca_cert_.get();
+			return root_cert_ ? 1 : 0;
 		}
 		void generate_self_signed_ca(const std::string& common_name = "server", int valid_days = 365);
 		void generate_csr(const std::string& commonName);

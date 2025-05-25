@@ -59,7 +59,8 @@ namespace playclose {
 			auto new_connection = std::make_shared<session<Proto, Cipher>>(io_context_, connections_);
 			acceptor_.async_accept(new_connection->socket(),
 				boost::bind(&e2e_node::handle_accept, this, new_connection,
-					boost::asio::placeholders::error)); }
+					boost::asio::placeholders::error)); 
+		}
 
 		void handle_accept(std::shared_ptr<session<Proto, Cipher>> new_connection,
 			const boost::system::error_code& error) {

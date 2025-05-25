@@ -9,6 +9,7 @@ namespace playclose {
 
 	auto constexpr aes_data_size = 16;
 	auto constexpr aes_key_size = 32;
+	auto constexpr padding = ' ';
 	
 	struct aes : public i_cipher 
 	{
@@ -20,9 +21,12 @@ namespace playclose {
 			std::vector<uint8_t> buf(aes_data_size);
 			std::vector<std::string> chunks;
 			std::string res;	
+			std::string _data = data;
 
- 			for (int i = 0; i < data.size(); i += aes_data_size) {
- 				chunks.push_back(data.substr(i, aes_data_size));
+			aligned_16bytes(_data);
+
+ 			for (int i = 0; i < _data.size(); i += aes_data_size) {
+ 				chunks.push_back(_data.substr(i, aes_data_size));
 			}
 
 			AES256Encrypt enc(key.data());
@@ -40,6 +44,7 @@ namespace playclose {
 			std::vector<uint8_t> key = parse_hex(hexkey);
 			std::vector<std::string> chunks;
 			std::string res;	
+
  			for (int i = 0; i < data.size(); i += aes_data_size) {
  				chunks.push_back(data.substr(i, aes_data_size));
 			}
@@ -49,8 +54,39 @@ namespace playclose {
 				dec.Decrypt(buf.data(), parse_hex(convert_data_to_hex(i)).data());
 				res += convert_hex_to_data(parse_vector(buf));
 			}
+			remove_aligned_symbol(res);
 
 			return res;
+		}
+
+		void aligned_16bytes(std::string& payload) {
+			if(payload.empty()) {
+				return;
+			}
+			if(!(payload.size() % 16)) {
+				return;
+			}
+			else {
+				int need_to_add = 16 - payload.size() % 16;
+				for(auto i = 0; i < need_to_add; i++) {
+					payload += padding;	
+				}
+				return;
+			}
+		}
+		
+		void remove_aligned_symbol(std::string& payload) {
+			if(payload.empty()) {
+					return;
+			}
+			for(auto i = 0; i < 16; i++) {
+				if(payload.back() == padding) {
+					payload.pop_back();
+				}
+				else {
+					return;
+				}
+			}
 		}
 		
 	};

@@ -210,7 +210,10 @@ int main(int argc, char* argv[])
 														playclose::crypto::client_certificate>>
 								(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
 		
-		auto msg_init = msg_e2e->build_msg_e2e(id, id, crypt_e2e->get_pub_key());
+		//TODO aes-gcm
+		//TODO double-ratchet
+		//remote node must request cert by them self, i.e. blocking: client_api->verify_cert(node_id);
+		auto msg_init = msg_e2e->build_msg_e2e(id, id, "");
 		std::cout << "Init client on e2e_node SND: " + msg_init.first + msg_init.second << std::endl;
 		socket.write_some(boost::asio::buffer(msg_init.first + msg_init.second));
 

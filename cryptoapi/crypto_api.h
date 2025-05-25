@@ -124,7 +124,8 @@ namespace playclose {
 		{}
 	
 		void set_cert(const std::string& cert) {
-			cert_->set_cert_csr(cert); //TODO 
+			//cert_->set_cert_ca(cert);
+			//cert_->set_cert_csr(cert); //TODO 
 		}	
 
 		std::string generate_cert(const std::string& client_name) {
@@ -138,21 +139,21 @@ namespace playclose {
 
 		int verify_cert(const std::string& cert) {
 			int res = -1;
-			//Client verify servers certificates
+			//Client verify certificates from server
 			if(cert.empty()) {
 				return res;
 			}
 			auto certificate = cert_->pem_to_x509(cert);
+			//TODO if(is_root_cert(certificate))
 			if(!is_root_cert_set()) {
 				//verify
 				res = cert_->parse_x509_ca(certificate.get());
-				if(!res) {
-					//set ca_cert as root
-					cert_->set_ca_cert(std::move(certificate));
+				if(!res) { 
+					cert_->set_root_cert(std::move(certificate));
 				}
 			}
 			else {
-				res = cert_->parse_x509_ca(certificate.get(), cert_->ca_cert_.get());	
+				res = cert_->parse_x509_ca(certificate.get(), cert_->root_cert_.get());	
 			}
 			return res;
 		}

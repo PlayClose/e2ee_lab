@@ -9,8 +9,7 @@ namespace playclose {
 	auto constexpr payload_length_size = 4;
 	auto constexpr attr_length_size = 1;
 	auto constexpr cmd_length_size = 3;
-	auto constexpr padding = ' ';
-	
+
 	enum class msg_attribute : uint8_t {
 		none,
 		encrypt,

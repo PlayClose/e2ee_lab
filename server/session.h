@@ -169,12 +169,6 @@ namespace playclose {
 			}
 		}
 	
-		void e2e_channel_read() {
-			read_e2e();	
-		}	
-		void e2e_channel_write(const std::string& msg) {	
-			write_e2e(msg);
-		}
 		void read_e2e() {
 			buf_.clear();
 			buf_.resize(buf_size);
@@ -231,10 +225,9 @@ namespace playclose {
 						}
 						else {	
 							std::string src, dst;
-							auto payload = msg_e2e_->transfer_e2e(buf_, src, dst);
-							if(src == dst) { //TODO check attr if need it
+							auto [attr, payload] = msg_e2e_->transfer_e2e(buf_, src, dst);
+							if(src == dst) {
 								str_id_ = src;
-								cli_pub_key_ = payload.second;
 							}
 							else {
 								//TODO stop client there
