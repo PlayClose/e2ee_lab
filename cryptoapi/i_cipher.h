@@ -6,7 +6,8 @@ namespace playclose {
 	enum class cipher : uint8_t
 	{
 		kuznechik,
-		aes
+		aes,
+		aesgcm
 	};
 
 	struct i_cipher
