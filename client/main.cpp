@@ -69,14 +69,14 @@ int main(int argc, char* argv[])
 		std::string srv_pub_key_callback;	
 		//Init api by default for working with certificates		
 		std::shared_ptr<playclose::crypto::api<
-				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>,
+				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aesgcm>,
 				playclose::crypto::openssl_dh,
-				playclose::crypto::aes>>
-		crypt = playclose::crypto::get_api<playclose::crypto::ClientPolicy, playclose::crypto::openssl_dh, playclose::crypto::aes>(512);
+				playclose::crypto::aesgcm>>
+		crypt = playclose::crypto::get_api<playclose::crypto::ClientPolicy, playclose::crypto::openssl_dh, playclose::crypto::aesgcm>(512);
 		auto msg = std::make_unique<	
 									playclose::misc::msg_cli_srv<
 														playclose::crypto::openssl_dh, 
-														playclose::crypto::aes, 
+														playclose::crypto::aesgcm, 
 														playclose::crypto::client_certificate>>
 												(crypt, [&srv_pub_key_callback]{return srv_pub_key_callback;});
 		//TODO certificates tasks:
@@ -161,12 +161,12 @@ int main(int argc, char* argv[])
 
 		//TODO auto doesn't work, make wrapper
 		std::shared_ptr<playclose::crypto::api<
-				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aes>,
+				playclose::crypto::client_certificate<playclose::crypto::openssl_dh, playclose::crypto::aesgcm>,
 				playclose::crypto::openssl_dh,
-				playclose::crypto::aes>>
+				playclose::crypto::aesgcm>>
 		crypt_e2e = playclose::crypto::get_api<playclose::crypto::ClientPolicy,
 													playclose::crypto::openssl_dh,
-													playclose::crypto::aes>(prime_e2e);
+													playclose::crypto::aesgcm>(prime_e2e);
 		std::cout << "e2e cli_pub_key: " << crypt_e2e->get_pub_key() << std::endl;
 		//SND crypt id + e2e_pub_key
 		auto [e2e_header, e2e_payload] = msg->build_msg("id and key", id + ":" + crypt_e2e->get_pub_key(), playclose::misc::msg_attribute::encrypt);
@@ -206,7 +206,7 @@ int main(int argc, char* argv[])
 		auto msg_e2e = std::make_unique<
 									playclose::misc::msg_e2e<
 														playclose::crypto::openssl_dh, 
-														playclose::crypto::aes, 
+														playclose::crypto::aesgcm, 
 														playclose::crypto::client_certificate>>
 								(crypt_e2e, [opposite_node_pub_key]{return opposite_node_pub_key;});
 		

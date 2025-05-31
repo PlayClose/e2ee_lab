@@ -32,8 +32,6 @@ namespace playclose {
 	static OSSL_LIB_CTX *libctx = NULL;
 	static const char *propq = NULL;
 
-	auto constexpr aes_key_size = 32;
-	
 	struct aesgcm : public i_cipher 
 	{
 		std::unique_ptr<EVP_CIPHER_CTX, deleter<EVP_CIPHER_CTX_free>> ctx;
@@ -67,11 +65,7 @@ namespace playclose {
 				OSSL_PARAM_END, OSSL_PARAM_END
 			};
 
-			printf("AES GCM Encrypt:\n");
-			printf("Plaintext:\n");
-			BIO_dump_fp(stdout, plain.data(), plain.size());
-
-						/* Set IV length if default 96 bits is not appropriate */
+			/* Set IV length if default 96 bits is not appropriate */
 			params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN,
 													&gcm_ivlen);
 
@@ -93,10 +87,6 @@ namespace playclose {
 			if (!EVP_EncryptUpdate(ctx.get(), outbuf, &outlen, plain.data(), plain.size()))
 				throw std::runtime_error("initialization error");
 
-			/* Output encrypted block */
-			printf("Ciphertext:\n");
-			BIO_dump_fp(stdout, outbuf, outlen);
-
 			/* Finalise: note get no output for GCM */
 			if (!EVP_EncryptFinal_ex(ctx.get(), outbuf, &tmplen))
 				throw std::runtime_error("initialization error");
@@ -107,10 +97,6 @@ namespace playclose {
 
 			if (!EVP_CIPHER_CTX_get_params(ctx.get(), params))
 				throw std::runtime_error("initialization error");
-
-			/* Output tag */
-			printf("Tag:\n");
-			BIO_dump_fp(stdout, outtag, 16);
 
 			std::vector<uint8_t> buf_outtag(outtag, outtag + 16);
 			std::vector<uint8_t> buf(outbuf, outbuf + outlen);
@@ -128,10 +114,6 @@ namespace playclose {
 			OSSL_PARAM params[2] = {
 				OSSL_PARAM_END, OSSL_PARAM_END
 			};
-
-			printf("AES GCM Decrypt:\n");
-			printf("Ciphertext:\n");
-			BIO_dump_fp(stdout, cypher.data(), cypher.size());
 
 			/* Set IV length if default 96 bits is not appropriate */
 			params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN,
@@ -152,10 +134,6 @@ namespace playclose {
 			if (!EVP_DecryptUpdate(ctx.get(), outbuf, &outlen, cypher.data(), cypher.size()))
 				throw std::runtime_error("initialization error");
 
-			/* Output decrypted block */
-			printf("Plaintext:\n");
-			BIO_dump_fp(stdout, outbuf, outlen);
-
 			/* Set expected tag value. */
 			params[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
 														  (void*)tag.data(), tag.size());
@@ -171,7 +149,9 @@ namespace playclose {
 			 * Print out return value. If this is not successful authentication
 			 * failed and plaintext is not trustworthy.
 			 */
-			printf("Tag Verify %s\n", rv > 0 ? "Successful!" : "Failed!");
+			//printf("Tag Verify %s\n", rv > 0 ? "Successful!" : "Failed!");
+			if(!(rv > 0)) 
+				std::runtime_error("tag is different!");
 
 			return convert_hex_to_data(parse_vector(buf));
 		}

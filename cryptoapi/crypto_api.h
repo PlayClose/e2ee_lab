@@ -1,6 +1,7 @@
 #pragma once 
 #include "openssl_dh.h"
 #include "aes.h"
+#include "aesgcm.h"
 #include "certificate.h"
 
 namespace playclose {

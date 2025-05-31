@@ -37,8 +37,8 @@ int main()
 		const unsigned num_threads = std::thread::hardware_concurrency();
 
 		boost::asio::io_context io_context(num_threads);
-		playclose::server::pki_server<playclose::crypto::openssl_dh, playclose::crypto::aes> server(io_context, 9090);
-		playclose::server::e2e_node<playclose::crypto::openssl_dh, playclose::crypto::aes> e2e(io_context, 9091);
+		playclose::server::pki_server<playclose::crypto::openssl_dh, playclose::crypto::aesgcm> server(io_context, 9090);
+		playclose::server::e2e_node<playclose::crypto::openssl_dh, playclose::crypto::aesgcm> e2e(io_context, 9091);
 
 		run_threads(num_threads, [&io_context] {
 			io_context.run();
