@@ -41,19 +41,22 @@ namespace playclose {
 			
 			ctx.reset(EVP_CIPHER_CTX_new());
 			/* Create a context for the encrypt operation */
-			if ((ctx == nullptr))
+			if ((ctx == nullptr)) {
 				throw std::runtime_error("ctx initialization error");	
+			}
 
 			cipher.reset(EVP_CIPHER_fetch(libctx, "AES-256-GCM", propq));
 			/* Fetch the cipher implementation */
-			if ((cipher == nullptr))
+			if ((cipher == nullptr)) {
 				throw std::runtime_error("cipher initialization error");
+			}
 		}
 
 		~aesgcm() = default;
 
-		std::string encrypt(const std::string& hexkey, const std::string& data) override {
-			std::cout << "hexkey: " << hexkey  << " " << hexkey.size()<< std::endl;	
+		std::string encrypt(const std::string& hexkey, const std::string& data,
+								const std::string& iv = "", const std::string& aad = "") override {
+
 			std::vector<uint8_t> key = parse_hex(hexkey);
 			auto plain = parse_hex(convert_data_to_hex(data));
 
@@ -68,7 +71,6 @@ namespace playclose {
 			/* Set IV length if default 96 bits is not appropriate */
 			params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN,
 													&gcm_ivlen);
-
 			/*
 			 * Initialise an encrypt operation with the cipher/mode, key, IV and
 			 * IV length parameter.
@@ -76,6 +78,7 @@ namespace playclose {
 			 * application the IV would be generated internally so the iv passed in
 			 * would be NULL.
 			 */
+
 			if (!EVP_EncryptInit_ex2(ctx.get(), cipher.get(), key.data(), gcm_iv, params))
 				throw std::runtime_error("initialization error"); //TODO change exception message
 
@@ -100,10 +103,12 @@ namespace playclose {
 
 			std::vector<uint8_t> buf_outtag(outtag, outtag + 16);
 			std::vector<uint8_t> buf(outbuf, outbuf + outlen);
+
 			return convert_hex_to_data(parse_vector(buf)) + convert_hex_to_data(parse_vector(buf_outtag));
 		}
-			
-		std::string decrypt(const std::string& hexkey, const std::string& data) override {
+
+		std::string decrypt(const std::string& hexkey, const std::string& data,
+								const std::string& iv = "", const std::string& aad = "") override {
 			auto tag = parse_hex(convert_data_to_hex(data.substr(data.size() - 16, 16)));
 			auto cypher = parse_hex(convert_data_to_hex(data.substr(0, data.size() - 16)));
 			std::vector<uint8_t> key = parse_hex(hexkey);

@@ -14,8 +14,10 @@ namespace playclose {
 	{
 		i_cipher() = default;
 		virtual ~i_cipher() = default;
-		virtual std::string encrypt(const std::string& key, const std::string& data) = 0;
-		virtual std::string decrypt(const std::string& key, const std::string& data) = 0;
+		virtual std::string encrypt(const std::string& key, const std::string& data,
+									[[maybe_unused]] const std::string& iv = "", [[maybe_unused]] const std::string& aad = "") = 0;
+		virtual std::string decrypt(const std::string& key, const std::string& data,
+									[[maybe_unused]] const std::string& iv = "", [[maybe_unused]] const std::string& aad = "") = 0;
 	};
 	
 } // namespace crypto

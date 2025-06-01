@@ -16,7 +16,8 @@ namespace playclose {
 		aes() = default;
 		~aes() = default;
 
-		std::string encrypt(const std::string& hexkey, const std::string& data) override {
+		std::string encrypt(const std::string& hexkey, const std::string& data,
+								const std::string& iv = "", const std::string& aad = "") override {
 			std::vector<uint8_t> key = parse_hex(hexkey);
 			std::vector<uint8_t> buf(aes_data_size);
 			std::vector<std::string> chunks;
@@ -39,7 +40,8 @@ namespace playclose {
 			return res; 
 		}
 			
-		std::string decrypt(const std::string& hexkey, const std::string& data) override {
+		std::string decrypt(const std::string& hexkey, const std::string& data,
+								const std::string& iv = "", const std::string& aad = "") override {
 			std::vector<uint8_t> buf(aes_data_size);
 			std::vector<uint8_t> key = parse_hex(hexkey);
 			std::vector<std::string> chunks;
